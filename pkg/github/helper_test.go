@@ -10,6 +10,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type expectations struct {
+	path        string
+	queryParams map[string]string
+	requestBody any
+}
+
+// expect is a helper function to create a partial mock that expects various
+// request behaviors, such as path, query parameters, and request body.
+func expect(t *testing.T, e expectations) *partialMock {
+	return &partialMock{
+		t:                   t,
+		expectedPath:        e.path,
+		expectedQueryParams: e.queryParams,
+		expectedRequestBody: e.requestBody,
+	}
+}
+
 // expectPath is a helper function to create a partial mock that expects a
 // request with the given path, with the ability to chain a response handler.
 func expectPath(t *testing.T, expectedPath string) *partialMock {
@@ -77,6 +94,14 @@ func mockResponse(t *testing.T, code int, body interface{}) http.HandlerFunc {
 	t.Helper()
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(code)
+		// Some tests do not expect to return a JSON object, such as fetching a raw pull request diff,
+		// so allow strings to be returned directly.
+		s, ok := body.(string)
+		if ok {
+			_, _ = w.Write([]byte(s))
+			return
+		}
+
 		b, err := json.Marshal(body)
 		require.NoError(t, err)
 		_, _ = w.Write(b)
